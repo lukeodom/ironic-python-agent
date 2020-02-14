@@ -139,7 +139,7 @@ def _get_component_devices(raid_device):
     lines = out.splitlines()
     # the first line contains the md device itself
     for line in lines[1:]:
-        device = re.findall(r'/dev/\w+', line)
+        device = re.findall(r'(?:active|spare).*(/dev/\w+)', line)
         component_devices += device
 
     return component_devices
@@ -171,7 +171,7 @@ def get_holder_disks(raid_device):
 
     holder_parts = []
     for line in lines[1:]:
-        device = re.findall(r'/dev/\w+', line)
+        device = re.findall(r'(?:active|spare).*(/dev/\w+)', line)
         holder_parts += device
 
     for part in holder_parts:
