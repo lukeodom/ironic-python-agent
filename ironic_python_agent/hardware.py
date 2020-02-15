@@ -1086,6 +1086,10 @@ class GenericHardwareManager(HardwareManager):
                 LOG.info("Skipping metadata erase of read-only device %s",
                          dev.name)
                 continue
+            if self._is_too_small(dev):
+                LOG.info("Skipping metadata erase of really small device %s",
+                         dev.name)
+                continue
 
             try:
                 disk_utils.destroy_disk_metadata(dev.name, node['uuid'])
@@ -1177,6 +1181,29 @@ class GenericHardwareManager(HardwareManager):
                     return True
         except IOError as e:
             LOG.warning("Could not determine if %s is a read-only device. "
+                        "Error: %s",
+                        block_device.name, e)
+        return False
+    
+    def _is_too_small(self, block_device):
+        """Check if a block device is too small to dd
+
+        Check the devices size to make sure it's big
+        enough for the dd to work without running out
+        of space
+
+        :param block_device: a BlockDevice object
+        :returns: True if the device is < 33 blocks
+
+        """
+
+        try:
+            size = disk_utils.get_dev_block_size(block_device.name)
+
+            if size < 33:
+                return True
+        except IOError as e:
+            LOG.warning("Could not determine size of %s. "
                         "Error: %s",
                         block_device.name, e)
         return False
