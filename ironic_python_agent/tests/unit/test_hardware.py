@@ -789,6 +789,34 @@ MDADM_DETAIL_OUTPUT_BROKEN_RAID0 = ("""/dev/md126:
        -       8        2        -        /dev/sda2
 """)
 
+MDADM_DETAIL_OUTPUT_WHOLE_DISK_RAID1 = ("""/dev/md127:
+           Version : 0.90
+     Creation Time : Wed Jan 22 22:00:40 2020
+        Raid Level : raid1
+        Array Size : 937692416 (894.25 GiB 960.20 GB)
+     Used Dev Size : 937692416 (894.25 GiB 960.20 GB)
+      Raid Devices : 2
+     Total Devices : 2
+   Preferred Minor : 127
+       Persistence : Superblock is persistent
+
+       Update Time : Thu Mar  5 15:39:00 2020
+             State : active 
+    Active Devices : 2
+   Working Devices : 2
+    Failed Devices : 0
+     Spare Devices : 0
+
+Consistency Policy : resync
+
+              UUID : e18f8ba8:f30bda56:0d07d1f7:fd07f54e
+            Events : 0.133
+
+    Number   Major   Minor   RaidDevice State
+       0       8        0        0      active sync   /dev/sda
+       1       8       16        1      active sync   /dev/sdb
+
+""")
 
 class FakeHardwareManager(hardware.GenericHardwareManager):
     def __init__(self, hardware_support):
@@ -3456,6 +3484,12 @@ class TestGenericHardwareManager(base.IronicAgentTest):
         mocked_execute.side_effect = [(MDADM_DETAIL_OUTPUT, '')]
         component_devices = hardware._get_component_devices('/dev/md0')
         self.assertEqual(['/dev/vde1', '/dev/vdf1'], component_devices)
+
+    @mock.patch.object(utils, 'execute', autospec=True)
+    def test__get_component_devices_broken_raid0(self, mocked_execute):
+        mocked_execute.side_effect = [(MDADM_DETAIL_OUTPUT_WHOLE_DISK_RAID1, '')]
+        component_devices = hardware._get_component_devices('/dev/md127')
+        self.assertEqual(['/dev/sda','/dev/sdb'], component_devices)
 
     @mock.patch.object(utils, 'execute', autospec=True)
     def test__get_component_devices_broken_raid0(self, mocked_execute):
