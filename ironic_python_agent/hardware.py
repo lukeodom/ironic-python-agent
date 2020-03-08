@@ -216,6 +216,9 @@ def md_restart(raid_device):
         utils.execute('mdadm', '--stop', raid_device)
         utils.execute('mdadm', '--assemble', raid_device,
                       *component_devices)
+        utils.execute('partx', '-u', raid_device, attempts=3)
+        utils.execute('udevadm', 'settle')
+
     except processutils.ProcessExecutionError as e:
         error_msg = ('Could not restart md device %(dev)s: %(err)s' %
                      {'dev': raid_device, 'err': e})
@@ -1093,10 +1096,13 @@ class GenericHardwareManager(HardwareManager):
 
             try:
                 disk_utils.destroy_disk_metadata(dev.name, node['uuid'])
+                utils.execute('partx', '-u', dev.name, attempts=3, check_exit_code=False)
+
             except processutils.ProcessExecutionError as e:
                 LOG.error('Failed to erase the metadata on device "%(dev)s". '
                           'Error: %(error)s', {'dev': dev.name, 'error': e})
                 erase_errors[dev.name] = e
+        utils.execute('udevadm', 'settle')
 
         if erase_errors:
             excpt_msg = ('Failed to erase the metadata on the device(s): %s' %
