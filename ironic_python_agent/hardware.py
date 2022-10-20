@@ -256,7 +256,7 @@ def get_holder_disks(raid_device):
 
     holder_parts = []
     for line in lines[1:]:
-        device = re.findall(r'/dev/\w+', line)
+        device = re.findall(r'/dev/\w+$', line)
         holder_parts += device
 
     for part in holder_parts:
