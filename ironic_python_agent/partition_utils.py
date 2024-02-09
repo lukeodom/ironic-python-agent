@@ -427,7 +427,8 @@ def create_config_drive_partition(node_uuid, device, configdrive):
                               endlimit)
             # Trigger device rescan
             disk_utils.trigger_device_rescan(device)
-            sleep 5
+            import time
+            time.sleep(5)
 
             if part_uuid is None:
                 new_parts = {part['number']: part
