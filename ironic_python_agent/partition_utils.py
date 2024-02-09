@@ -317,7 +317,9 @@ def work_on_disk(dev, root_mb, swap_mb, ephemeral_mb, ephemeral_format,
 
     # Rescan device to get current status (e.g. reflect modification of mkfs)
     disk_utils.trigger_device_rescan(dev)
-
+    import time
+    time.sleep(5)
+    
     uuids_to_return = {
         'root uuid': root_part,
         'efi system partition uuid': part_dict.get('efi system partition'),
