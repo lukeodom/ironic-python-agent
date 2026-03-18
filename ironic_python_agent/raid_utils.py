@@ -412,9 +412,34 @@ def prepare_boot_partitions_for_softraid(device, holders, efi_part,
             disk_utils.trigger_device_rescan(md_device)
 
         if efi_part:
-            # Blockdev copy the source ESP and erase it
-            LOG.debug("Relocating EFI %s to %s", efi_part, md_device)
-            utils.execute('cp', efi_part, md_device)
+            # Filesystem-level copy of the source ESP to md_device.
+            # A raw block copy (cp/dd) cannot be used here because the
+            # md_device is built with --metadata=1.0 (mandatory for boot),
+            # which stores the superblock at the END of the device and
+            # consumes ~64KiB of usable space. The source ESP partition
+            # (from the deployed image) is exactly ESP_SIZE_MIB in size,
+            # so a block copy always fails with "No space left on device".
+            # Instead, create a fresh FAT32 filesystem on md_device sized
+            # to fit, then copy only the files across.
+            LOG.debug("Relocating EFI %s to %s via filesystem copy",
+                      efi_part, md_device)
+            out, _ = utils.execute('blockdev', '--getsize64', md_device)
+            md_size = int(out.strip())
+            with utils.mounted(efi_part) as src_mnt:
+                out, _ = utils.execute('du', '-sb', src_mnt)
+                esp_used = int(out.split()[0])
+                if esp_used > md_size:
+                    raise errors.SoftwareRAIDError(
+                        "ESP content (%d bytes) exceeds md device usable "
+                        "size (%d bytes). The source ESP partition may be "
+                        "larger than ESP_SIZE_MIB or unusually full."
+                        % (esp_used, md_size))
+                LOG.debug("ESP content size: %d bytes, md device size: "
+                          "%d bytes", esp_used, md_size)
+                utils.mkfs(fs='vfat', path=md_device, label='esp')
+                with utils.mounted(md_device) as dst_mnt:
+                    utils.execute('cp', '-a',
+                                  src_mnt + '/.', dst_mnt + '/')
             LOG.debug("Erasing EFI partition %s", efi_part)
             utils.execute('wipefs', '-a', efi_part)
         else:
