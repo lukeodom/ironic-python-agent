@@ -187,16 +187,16 @@ class TestRaidUtils(base.IronicAgentTest):
     @mock.patch.object(raid_utils, 'get_next_free_raid_device', autospec=True,
                        return_value='/dev/md42')
     @mock.patch.object(hardware, 'dispatch_to_managers', autospec=True)
-    @mock.patch.object(utils, 'mkfs', autospec=True)
     @mock.patch.object(utils, 'execute', autospec=True)
     @mock.patch.object(disk_utils, 'find_efi_partition', autospec=True)
     def test_prepare_boot_partitions_for_softraid_uefi_gpt(
-            self, mock_efi_part, mock_execute, mock_mkfs, mock_dispatch,
+            self, mock_efi_part, mock_execute, mock_dispatch,
             mock_free_raid_device, mock_rescan, mock_find_esp):
         mock_efi_part.return_value = {'number': '12'}
         # md_size > esp_used so the size check passes
         md_size = 576651264  # 550 MiB - 64KiB
         esp_used = 31457280  # ~30 MiB of EFI content
+        esp_uuid = '0B8C-37B6'
         mock_execute.side_effect = [
             ('451', None),           # sgdisk -F
             (None, None),            # sgdisk create part
@@ -210,8 +210,10 @@ class TestRaidUtils(base.IronicAgentTest):
             ('/dev/sdb14: whatever', None),    # blkid
             (None, None),            # mdadm
             ('%d\n' % md_size, None),  # blockdev --getsize64
+            ('%s\n' % esp_uuid, None),  # blkid UUID
             (None, None),            # mount efi_part
             ('%d\t/tmp/fake_src\n' % esp_used, None),  # du -sb src_mnt
+            (None, None),            # mkfs.vfat
             (None, None),            # mount md_device
             (None, None),            # cp -a
             (None, None),            # umount dst
@@ -246,8 +248,10 @@ class TestRaidUtils(base.IronicAgentTest):
                       '--metadata=1.0', '--level', '1', '--name', 'esp',
                       '--raid-devices', 2, '/dev/sda12', '/dev/sdb14'),
             mock.call('blockdev', '--getsize64', '/dev/md42'),
+            mock.call('blkid', '-s', 'UUID', '-o', 'value', '/dev/md0p12'),
             mock.call('mount', '/dev/md0p12', '/tmp/fake_src', attempts=1, delay_on_retry=True),
             mock.call('du', '-sb', '/tmp/fake_src'),
+            mock.call('mkfs.vfat', '-n', 'esp', '-i', '0B8C37B6', '/dev/md42'),
             mock.call('mount', '/dev/md42', '/tmp/fake_dst', attempts=1, delay_on_retry=True),
             mock.call('cp', '-a', '/tmp/fake_src/.', '/tmp/fake_dst/'),
             mock.call('umount', '/tmp/fake_dst', attempts=3,
@@ -257,8 +261,6 @@ class TestRaidUtils(base.IronicAgentTest):
             mock.call('wipefs', '-a', '/dev/md0p12'),
         ]
         mock_execute.assert_has_calls(expected, any_order=False)
-        mock_mkfs.assert_called_once_with(fs='vfat', path='/dev/md42',
-                                          label='esp')
         self.assertEqual(efi_part, '/dev/md42')
         mock_rescan.assert_called_once_with('/dev/md42')
 
@@ -322,13 +324,13 @@ class TestRaidUtils(base.IronicAgentTest):
     @mock.patch.object(raid_utils, 'get_next_free_raid_device', autospec=True,
                        return_value='/dev/md42')
     @mock.patch.object(hardware, 'dispatch_to_managers', autospec=True)
-    @mock.patch.object(utils, 'mkfs', autospec=True)
     @mock.patch.object(utils, 'execute', autospec=True)
     def test_prepare_boot_partitions_for_softraid_uefi_gpt_efi_provided(
-            self, mock_execute, mock_mkfs, mock_dispatch,
+            self, mock_execute, mock_dispatch,
             mock_free_raid_device, mock_rescan, mock_find_esp):
         md_size = 576651264  # 550 MiB - 64KiB
         esp_used = 31457280  # ~30 MiB of EFI content
+        esp_uuid = '0B8C-37B6'
         mock_execute.side_effect = [
             ('451', None),           # sgdisk -F
             (None, None),            # sgdisk create part
@@ -342,8 +344,10 @@ class TestRaidUtils(base.IronicAgentTest):
             ('/dev/sdb14: whatever', None),    # blkid
             (None, None),            # mdadm create
             ('%d\n' % md_size, None),  # blockdev --getsize64
+            ('%s\n' % esp_uuid, None),  # blkid UUID
             (None, None),            # mount efi_part
             ('%d\t/tmp/fake_src\n' % esp_used, None),  # du -sb src_mnt
+            (None, None),            # mkfs.vfat
             (None, None),            # mount md_device
             (None, None),            # cp -a
             (None, None),            # umount dst
@@ -377,8 +381,10 @@ class TestRaidUtils(base.IronicAgentTest):
                       '--metadata=1.0', '--level', '1', '--name', 'esp',
                       '--raid-devices', 2, '/dev/sda12', '/dev/sdb14'),
             mock.call('blockdev', '--getsize64', '/dev/md42'),
+            mock.call('blkid', '-s', 'UUID', '-o', 'value', '/dev/md0p15'),
             mock.call('mount', '/dev/md0p15', '/tmp/fake_src', attempts=1, delay_on_retry=True),
             mock.call('du', '-sb', '/tmp/fake_src'),
+            mock.call('mkfs.vfat', '-n', 'esp', '-i', '0B8C37B6', '/dev/md42'),
             mock.call('mount', '/dev/md42', '/tmp/fake_dst', attempts=1, delay_on_retry=True),
             mock.call('cp', '-a', '/tmp/fake_src/.', '/tmp/fake_dst/'),
             mock.call('umount', '/tmp/fake_dst', attempts=3,
@@ -388,8 +394,6 @@ class TestRaidUtils(base.IronicAgentTest):
             mock.call('wipefs', '-a', '/dev/md0p15'),
         ]
         mock_execute.assert_has_calls(expected, any_order=False)
-        mock_mkfs.assert_called_once_with(fs='vfat', path='/dev/md42',
-                                          label='esp')
         self.assertEqual(efi_part, '/dev/md42')
 
     @mock.patch.object(raid_utils, 'find_esp_raid', autospec=True)
@@ -397,16 +401,16 @@ class TestRaidUtils(base.IronicAgentTest):
     @mock.patch.object(raid_utils, 'get_next_free_raid_device', autospec=True,
                        return_value='/dev/md42')
     @mock.patch.object(hardware, 'dispatch_to_managers', autospec=True)
-    @mock.patch.object(utils, 'mkfs', autospec=True)
     @mock.patch.object(utils, 'execute', autospec=True)
     @mock.patch.object(disk_utils, 'find_efi_partition', autospec=True)
     def test_prepare_boot_partitions_for_softraid_uefi_gpt_esp_too_large(
-            self, mock_efi_part, mock_execute, mock_mkfs, mock_dispatch,
+            self, mock_efi_part, mock_execute, mock_dispatch,
             mock_free_raid_device, mock_rescan, mock_find_esp):
         """ESP content larger than md device raises SoftwareRAIDError."""
         mock_efi_part.return_value = {'number': '12'}
         md_size = 576651264   # 550 MiB - 64KiB
         esp_used = 629145600  # 600 MiB — larger than md_size
+        esp_uuid = '0B8C-37B6'
         mock_execute.side_effect = [
             ('451', None),           # sgdisk -F
             (None, None),            # sgdisk create part
@@ -420,6 +424,7 @@ class TestRaidUtils(base.IronicAgentTest):
             ('/dev/sdb14: whatever', None),    # blkid
             (None, None),            # mdadm
             ('%d\n' % md_size, None),  # blockdev --getsize64
+            ('%s\n' % esp_uuid, None),  # blkid UUID
             (None, None),            # mount efi_part
             ('%d\t/tmp/fake_src\n' % esp_used, None),  # du -sb src_mnt
             (None, None),            # umount src (cleanup on error)

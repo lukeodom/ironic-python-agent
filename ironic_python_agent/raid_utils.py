@@ -414,6 +414,10 @@ def prepare_boot_partitions_for_softraid(device, holders, efi_part,
                       efi_part, md_device)
             out, _ = utils.execute('blockdev', '--getsize64', md_device)
             md_size = int(out.strip())
+            # Preserve the source ESP UUID so fstab entries remain valid
+            out, _ = utils.execute('blkid', '-s', 'UUID', '-o', 'value',
+                                   efi_part)
+            esp_uuid = out.strip().replace('-', '')
             with utils.mounted(efi_part) as src_mnt:
                 out, _ = utils.execute('du', '-sb', src_mnt)
                 esp_used = int(out.split()[0])
@@ -421,7 +425,8 @@ def prepare_boot_partitions_for_softraid(device, holders, efi_part,
                     raise errors.SoftwareRAIDError(
                         "ESP content (%d bytes) exceeds md device "
                         "size (%d bytes)" % (esp_used, md_size))
-                utils.mkfs(fs='vfat', path=md_device, label='esp')
+                utils.execute('mkfs.vfat', '-n', 'esp', '-i', esp_uuid,
+                              md_device)
                 with utils.mounted(md_device) as dst_mnt:
                     utils.execute('cp', '-a',
                                   src_mnt + '/.', dst_mnt + '/')
